@@ -1,6 +1,11 @@
 ## 2.3
 
 #### Changes
+* Python, Java, Node: Add valkey-search 1.2 features including VERBATIM, INORDER, SLOP for FT.SEARCH and FT.AGGREGATE; SORTBY/WITHSORTKEYS for FT.SEARCH; shard scope and consistency mode for FT.SEARCH in cluster mode; DIALECT for FT.AGGREGATE ([#5571](https://github.com/valkey-io/valkey-glide/pull/5571))
+* Python, Java, Node: Expand FT.CREATE field options: TextField now supports NOSTEM, WEIGHT, WITHSUFFIXTRIE/NOSUFFIXTRIE, SORTABLE; TagField supports CASESENSITIVE, SEPARATOR, SORTABLE; NumericField supports SORTABLE; VectorField supports SORTABLE ([#5571](https://github.com/valkey-io/valkey-glide/pull/5571))
+* Python, Java, Node: Add FT.CREATE index-level options: SCORE, LANGUAGE, SKIPINITIALSCAN, MINSTEMSIZE, WITHOFFSETS/NOOFFSETS, NOSTOPWORDS/STOPWORDS, PUNCTUATION ([#5571](https://github.com/valkey-io/valkey-glide/pull/5571))
+* Java: Add TagField(boolean caseSensitive, boolean sortable) constructor for creating sortable tag fields without specifying a separator
+* Node: Fix HNSW vector field serialization to use correct property names (`numberOfEdges`, `vectorsExaminedOnConstruction`, `vectorsExaminedOnRuntime`) matching the TypeScript type definitions ([#5571](https://github.com/valkey-io/valkey-glide/pull/5571))
 * Node: add dynamic PubSub support ([#5295](https://github.com/valkey-io/valkey-glide/pull/5295))
 * Java: Add uber JAR support for multi-platform builds ([5484](https://github.com/valkey-io/valkey-glide/issues/5484))
 * JAVA: Add EVAL_RO, EVALSHA_RO, and SCRIPT DEBUG commands ([#5125](https://github.com/valkey-io/valkey-glide/pull/5125))
