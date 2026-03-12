@@ -57,35 +57,6 @@ public class FTCreateOptions {
     /** Custom punctuation characters to use during tokenization. */
     private final String punctuation;
 
-    FTCreateOptions(
-            DataType dataType,
-            GlideString[] prefixes,
-            Double score,
-            String language,
-            boolean skipInitialScan,
-            Integer minStemSize,
-            boolean withOffsets,
-            boolean noOffsets,
-            boolean noStopWords,
-            String[] stopWords,
-            String punctuation) {
-        this.dataType = dataType;
-        this.prefixes = prefixes;
-        this.score = score;
-        this.language = language;
-        this.skipInitialScan = skipInitialScan;
-        this.minStemSize = minStemSize;
-        this.withOffsets = withOffsets;
-        this.noOffsets = noOffsets;
-        this.noStopWords = noStopWords;
-        this.stopWords = stopWords;
-        this.punctuation = punctuation;
-    }
-
-    public static FTCreateOptionsBuilder builder() {
-        return new FTCreateOptionsBuilder();
-    }
-
     public GlideString[] toArgs() {
         if (withOffsets && noOffsets) {
             throw new IllegalArgumentException("withOffsets and noOffsets are mutually exclusive.");

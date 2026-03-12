@@ -3697,6 +3697,76 @@ describe("Server Module Tests", () => {
             await GlideFt.dropindex(client, index);
         });
 
+        it("FT.SEARCH 1.2 - WITHSORTKEYS on HASH", async () => {
+            client = await GlideClusterClient.createClient(
+                getClientConfigurationOption(
+                    cluster.getAddresses(),
+                    ProtocolVersion.RESP3,
+                ),
+            );
+            const prefix = "{" + getRandomKey() + "}:";
+            const index = prefix + "index";
+
+            expect(
+                await GlideFt.create(
+                    client,
+                    index,
+                    [
+                        { type: "NUMERIC", name: "price", sortable: true },
+                        { type: "TEXT", name: "name" },
+                    ],
+                    { dataType: "HASH", prefixes: [prefix] },
+                ),
+            ).toEqual("OK");
+
+            await client.hset(prefix + "1", [
+                { field: "price", value: "10" },
+                { field: "name", value: "Aardvark" },
+            ]);
+            await client.hset(prefix + "2", [
+                { field: "price", value: "20" },
+                { field: "name", value: "Mango" },
+            ]);
+            await client.hset(prefix + "3", [
+                { field: "price", value: "30" },
+                { field: "name", value: "Zebra" },
+            ]);
+
+            await new Promise((resolve) =>
+                setTimeout(resolve, DATA_PROCESSING_TIMEOUT),
+            );
+
+            // WITHSORTKEYS — each doc value becomes [sortKey, fieldMap]
+            const result = await GlideFt.search(
+                client,
+                index,
+                "@price:[1 +inf]",
+                {
+                    sortby: "price",
+                    sortbyOrder: SortOrder.ASC,
+                    withsortkeys: true,
+                },
+            );
+            expect(result[0]).toEqual(3);
+
+            // Each doc value is [sortKey, fieldMap] as a GlideRecord
+            const docs = result[1] as unknown as GlideRecord<
+                [GlideString, GlideRecord<GlideString>]
+            >;
+            const sortKeys = docs.map((doc) => doc.value[0]?.toString());
+            expect(sortKeys).toEqual(["#10", "#20", "#30"]);
+
+            // Field maps are still accessible at index 1
+            const fieldPrices = docs.map((doc) =>
+                (doc.value[1] as GlideRecord<GlideString>)
+                    .find((f) => f.key.toString() === "price")
+                    ?.value.toString(),
+            );
+            expect(fieldPrices).toEqual(["10", "20", "30"]);
+
+            await GlideFt.dropindex(client, index);
+        });
+
         it("FT.SEARCH 1.2 - VERBATIM, INORDER, SLOP on HASH", async () => {
             client = await GlideClusterClient.createClient(
                 getClientConfigurationOption(
@@ -4013,7 +4083,11 @@ describe("Server Module Tests", () => {
                     client,
                     index,
                     [{ type: "TEXT", name: "title" }],
-                    { dataType: "HASH", prefixes: [stemPrefix], minStemSize: 6 },
+                    {
+                        dataType: "HASH",
+                        prefixes: [stemPrefix],
+                        minStemSize: 6,
+                    },
                 ),
             ).toEqual("OK");
             await client.hset(stemPrefix + "1", [
@@ -4177,17 +4251,9 @@ describe("Server Module Tests", () => {
             expect(result[0]).toEqual(1);
 
             // NOSTEM: "hello" matches exactly, but "hellos" should not (no stemming)
-            const nostemExact = await GlideFt.search(
-                client,
-                index,
-                "hello",
-            );
+            const nostemExact = await GlideFt.search(client, index, "hello");
             expect(nostemExact[0]).toEqual(1);
-            const nostemStemmed = await GlideFt.search(
-                client,
-                index,
-                "hellos",
-            );
+            const nostemStemmed = await GlideFt.search(client, index, "hellos");
             expect(nostemStemmed[0]).toEqual(0);
 
             await GlideFt.dropindex(client, index);
@@ -4210,11 +4276,7 @@ describe("Server Module Tests", () => {
                 setTimeout(resolve, DATA_PROCESSING_TIMEOUT),
             );
             // Suffix query should work with suffix trie
-            const suffixResult = await GlideFt.search(
-                client,
-                index,
-                "*orld",
-            );
+            const suffixResult = await GlideFt.search(client, index, "*orld");
             expect(suffixResult[0]).toEqual(1);
             await GlideFt.dropindex(client, index);
 

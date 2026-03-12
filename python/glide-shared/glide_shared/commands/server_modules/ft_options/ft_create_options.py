@@ -481,6 +481,29 @@ class FtCreateOptions:
         self.stopwords = stopwords
         self.punctuation = punctuation
 
+    def _validate_options(self) -> None:
+        """Validate mutually exclusive options."""
+        if self.withoffsets and self.nooffsets:
+            raise ValueError("withoffsets and nooffsets are mutually exclusive.")
+        if self.nostopwords and self.stopwords is not None:
+            raise ValueError("nostopwords and stopwords are mutually exclusive.")
+
+    def _append_offset_args(self, args: List[TEncodable]) -> None:
+        """Append offset-related arguments."""
+        if self.withoffsets:
+            args.append(FtCreateKeywords.WITHOFFSETS)
+        elif self.nooffsets:
+            args.append(FtCreateKeywords.NOOFFSETS)
+
+    def _append_stopword_args(self, args: List[TEncodable]) -> None:
+        """Append stopword-related arguments."""
+        if self.nostopwords:
+            args.append(FtCreateKeywords.NOSTOPWORDS)
+        elif self.stopwords is not None:
+            args.append(FtCreateKeywords.STOPWORDS)
+            args.append(str(len(self.stopwords)))
+            args.extend(self.stopwords)
+
     def to_args(self) -> List[TEncodable]:
         """
         Get the optional arguments for the FT.CREATE command.
@@ -489,10 +512,7 @@ class FtCreateOptions:
             List[TEncodable]:
                 List of FT.CREATE optional arguments.
         """
-        if self.withoffsets and self.nooffsets:
-            raise ValueError("withoffsets and nooffsets are mutually exclusive.")
-        if self.nostopwords and self.stopwords is not None:
-            raise ValueError("nostopwords and stopwords are mutually exclusive.")
+        self._validate_options()
         args: List[TEncodable] = []
         if self.data_type:
             args.extend([FtCreateKeywords.ON, self.data_type.value])
@@ -508,16 +528,8 @@ class FtCreateOptions:
             args.append(FtCreateKeywords.SKIPINITIALSCAN)
         if self.minstemsize is not None:
             args.extend([FtCreateKeywords.MINSTEMSIZE, str(self.minstemsize)])
-        if self.withoffsets:
-            args.append(FtCreateKeywords.WITHOFFSETS)
-        elif self.nooffsets:
-            args.append(FtCreateKeywords.NOOFFSETS)
-        if self.nostopwords:
-            args.append(FtCreateKeywords.NOSTOPWORDS)
-        elif self.stopwords is not None:
-            args.append(FtCreateKeywords.STOPWORDS)
-            args.append(str(len(self.stopwords)))
-            args.extend(self.stopwords)
+        self._append_offset_args(args)
+        self._append_stopword_args(args)
         if self.punctuation is not None:
             args.extend([FtCreateKeywords.PUNCTUATION, self.punctuation])
         return args

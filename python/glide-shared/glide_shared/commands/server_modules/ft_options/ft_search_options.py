@@ -155,7 +155,10 @@ class FtSearchOptions:
             slop (Optional[int]): Specifies a slop value for proximity matching of text terms.
             sortby (Optional[TEncodable]): Field name to sort results by. Sorting is applied before the LIMIT clause.
             sortby_order (Optional[OrderBy]): Sort direction (ASC or DESC). Only used when ``sortby`` is set.
-            withsortkeys (Optional[bool]): If set and ``sortby`` is specified, augments the output with the sort key value.
+            withsortkeys (Optional[bool]): If set and ``sortby`` is specified, augments the output
+                with the sort key value. When enabled, each document value in the result map becomes
+                a two-element list ``[sort_key, field_map]`` instead of just ``field_map``. The sort
+                key is the value of the field used for sorting, or ``None`` if the field is missing.
             shard_scope (Optional[ShardScope]): Controls shard participation in cluster mode. See `ShardScope`.
             consistency (Optional[ConsistencyMode]): Controls consistency requirements in cluster mode. See `ConsistencyMode`.
         """

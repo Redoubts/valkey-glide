@@ -1339,11 +1339,14 @@ class TestSyncFt:
         """Test FT.CREATE with index-level options:
         SCORE, LANGUAGE, SKIPINITIALSCAN, MINSTEMSIZE, WITHOFFSETS/NOOFFSETS,
         NOSTOPWORDS/STOPWORDS, PUNCTUATION.
+
+        Each sub-test uses its own unique prefix to avoid index conflicts
+        when create/drop operations race across cluster shards.
         """
-        prefix = "{ft-create-1-2-" + str(uuid.uuid4()) + "}:"
 
         # SKIPINITIALSCAN — index is created but pre-existing keys are not backfilled.
-        index_skip = prefix + "skip"
+        skip_prefix = "{ft-create-skip-" + str(uuid.uuid4()) + "}:"
+        index_skip = skip_prefix + "idx"
         assert (
             ft.create(
                 glide_sync_client,
@@ -1351,7 +1354,7 @@ class TestSyncFt:
                 schema=[TextField("title")],
                 options=FtCreateOptions(
                     data_type=DataType.HASH,
-                    prefixes=[prefix],
+                    prefixes=[skip_prefix],
                     skipinitialscan=True,
                 ),
             )
@@ -1360,7 +1363,8 @@ class TestSyncFt:
         assert ft.dropindex(glide_sync_client, index_skip) == OK
 
         # SCORE — accepted for RediSearch interoperability (only 1.0 is valid).
-        index_score = prefix + "score"
+        score_prefix = "{ft-create-score-" + str(uuid.uuid4()) + "}:"
+        index_score = score_prefix + "idx"
         assert (
             ft.create(
                 glide_sync_client,
@@ -1368,7 +1372,7 @@ class TestSyncFt:
                 schema=[TextField("title")],
                 options=FtCreateOptions(
                     data_type=DataType.HASH,
-                    prefixes=[prefix],
+                    prefixes=[score_prefix],
                     score=1.0,
                 ),
             )
@@ -1377,7 +1381,8 @@ class TestSyncFt:
         assert ft.dropindex(glide_sync_client, index_score) == OK
 
         # LANGUAGE ENGLISH
-        index_lang = prefix + "lang"
+        lang_prefix = "{ft-create-lang-" + str(uuid.uuid4()) + "}:"
+        index_lang = lang_prefix + "idx"
         assert (
             ft.create(
                 glide_sync_client,
@@ -1385,7 +1390,7 @@ class TestSyncFt:
                 schema=[TextField("body")],
                 options=FtCreateOptions(
                     data_type=DataType.HASH,
-                    prefixes=[prefix],
+                    prefixes=[lang_prefix],
                     language="ENGLISH",
                 ),
             )
@@ -1426,7 +1431,8 @@ class TestSyncFt:
         assert ft.dropindex(glide_sync_client, index_stem) == OK
 
         # WITHOFFSETS (default) — explicit flag
-        index_offsets = prefix + "offsets"
+        off_prefix = "{ft-create-off-" + str(uuid.uuid4()) + "}:"
+        index_offsets = off_prefix + "idx"
         assert (
             ft.create(
                 glide_sync_client,
@@ -1434,7 +1440,7 @@ class TestSyncFt:
                 schema=[TextField("body")],
                 options=FtCreateOptions(
                     data_type=DataType.HASH,
-                    prefixes=[prefix],
+                    prefixes=[off_prefix],
                     withoffsets=True,
                 ),
             )
@@ -1533,7 +1539,8 @@ class TestSyncFt:
         assert ft.dropindex(glide_sync_client, index_stopwords) == OK
 
         # PUNCTUATION with custom characters
-        index_punct = prefix + "punct"
+        punct_prefix = "{ft-create-punct-" + str(uuid.uuid4()) + "}:"
+        index_punct = punct_prefix + "idx"
         assert (
             ft.create(
                 glide_sync_client,
@@ -1541,7 +1548,7 @@ class TestSyncFt:
                 schema=[TextField("body")],
                 options=FtCreateOptions(
                     data_type=DataType.HASH,
-                    prefixes=[prefix],
+                    prefixes=[punct_prefix],
                     punctuation=".,!?",
                 ),
             )
@@ -1557,12 +1564,12 @@ class TestSyncFt:
         """Test FT.CREATE with field-level options:
         TextField: NOSTEM, WITHSUFFIXTRIE, NOSUFFIXTRIE, WEIGHT
         All field types: SORTABLE
+
+        Each sub-test uses its own unique prefix to avoid index conflicts
+        when create/drop operations race across cluster shards.
         """
-        prefix = "{ft-field-opts-" + str(uuid.uuid4()) + "}:"
 
         # TextField with NOSTEM — stemming is disabled, so "hellos" won't match "hello"
-        # Each sub-test that inserts data uses its own prefix to avoid
-        # cross-contamination from previously inserted keys.
         nostem_prefix = "{ft-field-nostem-" + str(uuid.uuid4()) + "}:"
         index_nostem = nostem_prefix + "idx"
         assert (
@@ -1570,7 +1577,9 @@ class TestSyncFt:
                 glide_sync_client,
                 index_nostem,
                 schema=[TextField("title", nostem=True)],
-                options=FtCreateOptions(data_type=DataType.HASH, prefixes=[nostem_prefix]),
+                options=FtCreateOptions(
+                    data_type=DataType.HASH, prefixes=[nostem_prefix]
+                ),
             )
             == OK
         )
@@ -1592,7 +1601,9 @@ class TestSyncFt:
                 glide_sync_client,
                 index_suffix,
                 schema=[TextField("title", withsuffixtrie=True)],
-                options=FtCreateOptions(data_type=DataType.HASH, prefixes=[suffix_prefix]),
+                options=FtCreateOptions(
+                    data_type=DataType.HASH, prefixes=[suffix_prefix]
+                ),
             )
             == OK
         )
@@ -1613,7 +1624,9 @@ class TestSyncFt:
                 glide_sync_client,
                 index_nosuffix,
                 schema=[TextField("title", nosuffixtrie=True)],
-                options=FtCreateOptions(data_type=DataType.HASH, prefixes=[nosuffix_prefix]),
+                options=FtCreateOptions(
+                    data_type=DataType.HASH, prefixes=[nosuffix_prefix]
+                ),
             )
             == OK
         )
@@ -1627,59 +1640,72 @@ class TestSyncFt:
         assert ft.dropindex(glide_sync_client, index_nosuffix) == OK
 
         # TextField with WEIGHT (only 1.0 is valid per the spec)
-        index_weight = prefix + "weight"
+        weight_prefix = "{ft-field-weight-" + str(uuid.uuid4()) + "}:"
+        index_weight = weight_prefix + "idx"
         assert (
             ft.create(
                 glide_sync_client,
                 index_weight,
                 schema=[TextField("title", weight=1.0)],
-                options=FtCreateOptions(data_type=DataType.HASH, prefixes=[prefix]),
+                options=FtCreateOptions(
+                    data_type=DataType.HASH, prefixes=[weight_prefix]
+                ),
             )
             == OK
         )
         assert ft.dropindex(glide_sync_client, index_weight) == OK
 
         # SORTABLE on TextField
-        index_sortable_text = prefix + "sortable-text"
+        sort_text_prefix = "{ft-field-sort-text-" + str(uuid.uuid4()) + "}:"
+        index_sortable_text = sort_text_prefix + "idx"
         assert (
             ft.create(
                 glide_sync_client,
                 index_sortable_text,
                 schema=[TextField("title", sortable=True)],
-                options=FtCreateOptions(data_type=DataType.HASH, prefixes=[prefix]),
+                options=FtCreateOptions(
+                    data_type=DataType.HASH, prefixes=[sort_text_prefix]
+                ),
             )
             == OK
         )
         assert ft.dropindex(glide_sync_client, index_sortable_text) == OK
 
         # SORTABLE on TagField
-        index_sortable_tag = prefix + "sortable-tag"
+        sort_tag_prefix = "{ft-field-sort-tag-" + str(uuid.uuid4()) + "}:"
+        index_sortable_tag = sort_tag_prefix + "idx"
         assert (
             ft.create(
                 glide_sync_client,
                 index_sortable_tag,
                 schema=[TagField("category", sortable=True)],
-                options=FtCreateOptions(data_type=DataType.HASH, prefixes=[prefix]),
+                options=FtCreateOptions(
+                    data_type=DataType.HASH, prefixes=[sort_tag_prefix]
+                ),
             )
             == OK
         )
         assert ft.dropindex(glide_sync_client, index_sortable_tag) == OK
 
         # SORTABLE on NumericField
-        index_sortable_num = prefix + "sortable-num"
+        sort_num_prefix = "{ft-field-sort-num-" + str(uuid.uuid4()) + "}:"
+        index_sortable_num = sort_num_prefix + "idx"
         assert (
             ft.create(
                 glide_sync_client,
                 index_sortable_num,
                 schema=[NumericField("price", sortable=True)],
-                options=FtCreateOptions(data_type=DataType.HASH, prefixes=[prefix]),
+                options=FtCreateOptions(
+                    data_type=DataType.HASH, prefixes=[sort_num_prefix]
+                ),
             )
             == OK
         )
         assert ft.dropindex(glide_sync_client, index_sortable_num) == OK
 
         # Combined: multiple field options on a single index
-        index_combined = prefix + "combined"
+        combined_prefix = "{ft-field-combined-" + str(uuid.uuid4()) + "}:"
+        index_combined = combined_prefix + "idx"
         assert (
             ft.create(
                 glide_sync_client,
@@ -1691,7 +1717,7 @@ class TestSyncFt:
                 ],
                 options=FtCreateOptions(
                     data_type=DataType.HASH,
-                    prefixes=[prefix],
+                    prefixes=[combined_prefix],
                     language="ENGLISH",
                     minstemsize=3,
                 ),
@@ -1824,22 +1850,25 @@ class TestSyncFt:
         prices_desc = [cast(Mapping, result_desc[1])[k][b"price"] for k in keys_desc]
         assert prices_desc == [b"3", b"2", b"1"]
 
-        # TODO: WITHSORTKEYS changes the raw response format (sort key entries are
-        # interleaved with doc entries), which glide-core's FTSearchReturnType conversion
-        # currently can't handle — raises "Response couldn't be converted to map".
-        # Requires a fix in glide-core/src/client/value_conversion.rs to handle the
-        # WITHSORTKEYS response layout. Uncomment once glide-core is fixed.
-        # result_withkeys = ft.search(
-        #     glide_sync_client,
-        #     index,
-        #     "@price:[1 +inf]",
-        #     options=FtSearchOptions(
-        #         sortby="price",
-        #         sortby_order=FtSearchOrderBy.ASC,
-        #         withsortkeys=True,
-        #     ),
-        # )
-        # assert result_withkeys[0] == 3
+        # WITHSORTKEYS — each doc value becomes [sort_key, field_map]
+        result_withkeys = ft.search(
+            glide_sync_client,
+            index,
+            "@price:[1 +inf]",
+            options=FtSearchOptions(
+                sortby="price",
+                sortby_order=FtSearchOrderBy.ASC,
+                withsortkeys=True,
+            ),
+        )
+        assert result_withkeys[0] == 3
+        # Each value is [sort_key, field_map]; prices should be ascending
+        withkeys_map = cast(Mapping, result_withkeys[1])
+        sort_keys = [withkeys_map[k][0] for k in withkeys_map]
+        assert sort_keys == [b"1", b"2", b"3"]
+        # Field maps are still accessible at index 1
+        field_prices = [withkeys_map[k][1][b"price"] for k in withkeys_map]
+        assert field_prices == [b"1", b"2", b"3"]
 
         assert ft.dropindex(glide_sync_client, index) == OK
 

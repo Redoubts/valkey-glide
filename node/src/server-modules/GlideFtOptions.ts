@@ -326,7 +326,11 @@ export type FtSearchOptions = {
     /** Sort direction for `sortby`. Only used when `sortby` is set. */
     sortbyOrder?: SortOrder | "ASC" | "DESC";
 
-    /** If set and `sortby` is specified, augments the output with the sort key value. */
+    /** If set and `sortby` is specified, augments the output with the sort key value.
+     * When enabled, each document value in the result map becomes a two-element array
+     * `[sortKey, fieldMap]` instead of just `fieldMap`. The sort key is the value of the
+     * field used for sorting, or `null` if the field is missing from the document.
+     */
     withsortkeys?: boolean;
 
     /**

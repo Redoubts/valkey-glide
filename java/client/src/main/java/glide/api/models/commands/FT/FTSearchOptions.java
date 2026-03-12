@@ -316,9 +316,10 @@ public class FTSearchOptions {
         /**
          * If set and sortBy is specified, augments the output with the sort key value.
          *
-         * <p><b>Note:</b> WITHSORTKEYS changes the raw FT.SEARCH response format (sort key entries are
-         * interleaved with document entries), which glide-core's response conversion currently cannot
-         * handle. The option is wired through but unusable until a glide-core fix is applied.
+         * <p>When WITHSORTKEYS is enabled, the response format changes: each document entry becomes a
+         * two-element array {@code [sortKey, fieldMap]} instead of just {@code fieldMap}. The sort key
+         * is the value of the field used for sorting (or {@code null} if the field is missing from the
+         * document).
          */
         public FTSearchOptionsBuilder withSortKeys() {
             this.withSortKeys$value = true;

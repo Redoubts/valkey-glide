@@ -998,6 +998,64 @@ public class VectorSearchTests {
 
     @SneakyThrows
     @Test
+    public void ft_search_1_2_withsortkeys() {
+        String prefix = "{" + UUID.randomUUID() + "}:";
+        String index = prefix + "index";
+
+        assertEquals(
+                OK,
+                FT.create(
+                                client,
+                                index,
+                                new FieldInfo[] {
+                                    new FieldInfo("price", new NumericField(true)),
+                                    new FieldInfo("name", new TextField()),
+                                },
+                                FTCreateOptions.builder()
+                                        .dataType(DataType.HASH)
+                                        .prefixes(new String[] {prefix})
+                                        .build())
+                        .get());
+
+        client.hset(prefix + "1", createMap("price", "10", "name", "Aardvark")).get();
+        client.hset(prefix + "2", createMap("price", "20", "name", "Mango")).get();
+        client.hset(prefix + "3", createMap("price", "30", "name", "Zebra")).get();
+        Thread.sleep(DATA_PROCESSING_TIMEOUT);
+
+        // WITHSORTKEYS — each doc value becomes [sortKey, fieldMap]
+        FTSearchOptions options =
+                FTSearchOptions.builder()
+                        .sortBy("price", FTSearchOptions.SortOrder.ASC)
+                        .withSortKeys()
+                        .build();
+        Object[] result = FT.search(client, index, "@price:[1 +inf]", options).get();
+        assertEquals(3L, result[0]);
+
+        // With WITHSORTKEYS the doc map values are Object[] { sortKey, fieldMap }
+        @SuppressWarnings("unchecked")
+        Map<GlideString, Object[]> docs = (Map<GlideString, Object[]>) result[1];
+        assertEquals(3, docs.size());
+
+        // Verify sort keys are in ascending order and field maps are accessible
+        int i = 0;
+        String[] expectedPrices = {"10", "20", "30"};
+        for (Map.Entry<GlideString, Object[]> entry : docs.entrySet()) {
+            Object[] pair = entry.getValue();
+            // pair[0] is the sort key (numeric sort keys are prefixed with #)
+            GlideString sortKey = (GlideString) pair[0];
+            assertTrue(sortKey.toString().contains(expectedPrices[i]));
+            // pair[1] is the field map
+            @SuppressWarnings("unchecked")
+            Map<GlideString, GlideString> fields = (Map<GlideString, GlideString>) pair[1];
+            assertEquals(gs(expectedPrices[i]), fields.get(gs("price")));
+            i++;
+        }
+
+        assertEquals(OK, FT.dropindex(client, index).get());
+    }
+
+    @SneakyThrows
+    @Test
     public void ft_search_1_2_text_query_flags() {
         String prefix = "{" + UUID.randomUUID() + "}:";
         String index = prefix + "index";
