@@ -1228,7 +1228,7 @@ class TestSyncFt:
         prefix = "{nocontent-search-" + str(uuid.uuid4()) + "}:"
         key1 = prefix + "1"
         key2 = prefix + "2"
-        index = prefix + "idx"
+        index = str(uuid.uuid4())
         vec_field = "vec"
 
         vector1 = array.array("f", [1.0, 0.0]).tobytes()
@@ -1282,7 +1282,7 @@ class TestSyncFt:
     def test_sync_ft_search_dialect(self, glide_sync_client: GlideClusterClient):
         prefix = "{dialect-search-" + str(uuid.uuid4()) + "}:"
         key1 = prefix + "1"
-        index = prefix + "idx"
+        index = str(uuid.uuid4())
         vec_field = "vec"
 
         vector1 = array.array("f", [1.0, 0.0]).tobytes()
@@ -1346,7 +1346,7 @@ class TestSyncFt:
 
         # SKIPINITIALSCAN — index is created but pre-existing keys are not backfilled.
         skip_prefix = "{ft-create-skip-" + str(uuid.uuid4()) + "}:"
-        index_skip = skip_prefix + "idx"
+        index_skip = skip_prefix + "index"
         assert (
             ft.create(
                 glide_sync_client,
@@ -1364,7 +1364,7 @@ class TestSyncFt:
 
         # SCORE — accepted for RediSearch interoperability (only 1.0 is valid).
         score_prefix = "{ft-create-score-" + str(uuid.uuid4()) + "}:"
-        index_score = score_prefix + "idx"
+        index_score = score_prefix + "index"
         assert (
             ft.create(
                 glide_sync_client,
@@ -1382,7 +1382,7 @@ class TestSyncFt:
 
         # LANGUAGE ENGLISH
         lang_prefix = "{ft-create-lang-" + str(uuid.uuid4()) + "}:"
-        index_lang = lang_prefix + "idx"
+        index_lang = lang_prefix + "index"
         assert (
             ft.create(
                 glide_sync_client,
@@ -1404,7 +1404,7 @@ class TestSyncFt:
         # Each sub-test that inserts data uses its own prefix to avoid
         # cross-contamination from previously inserted keys.
         stem_prefix = "{ft-create-1-2-stem-" + str(uuid.uuid4()) + "}:"
-        index_stem = stem_prefix + "idx"
+        index_stem = stem_prefix + "index"
         assert (
             ft.create(
                 glide_sync_client,
@@ -1432,7 +1432,7 @@ class TestSyncFt:
 
         # WITHOFFSETS (default) — explicit flag
         off_prefix = "{ft-create-off-" + str(uuid.uuid4()) + "}:"
-        index_offsets = off_prefix + "idx"
+        index_offsets = off_prefix + "index"
         assert (
             ft.create(
                 glide_sync_client,
@@ -1450,7 +1450,7 @@ class TestSyncFt:
 
         # NOOFFSETS — disables per-word offsets (phrase/slop queries will be rejected)
         nooff_prefix = "{ft-create-1-2-nooff-" + str(uuid.uuid4()) + "}:"
-        index_nooffsets = nooff_prefix + "idx"
+        index_nooffsets = nooff_prefix + "index"
         assert (
             ft.create(
                 glide_sync_client,
@@ -1484,7 +1484,7 @@ class TestSyncFt:
 
         # NOSTOPWORDS — all words are indexed, including default stop words.
         nostop_prefix = "{ft-create-1-2-nostop-" + str(uuid.uuid4()) + "}:"
-        index_nostop = nostop_prefix + "idx"
+        index_nostop = nostop_prefix + "index"
         assert (
             ft.create(
                 glide_sync_client,
@@ -1509,7 +1509,7 @@ class TestSyncFt:
 
         # STOPWORDS with custom list — custom stop words are rejected in queries.
         stop_prefix = "{ft-create-1-2-stop-" + str(uuid.uuid4()) + "}:"
-        index_stopwords = stop_prefix + "idx"
+        index_stopwords = stop_prefix + "index"
         assert (
             ft.create(
                 glide_sync_client,
@@ -1540,7 +1540,7 @@ class TestSyncFt:
 
         # PUNCTUATION with custom characters
         punct_prefix = "{ft-create-punct-" + str(uuid.uuid4()) + "}:"
-        index_punct = punct_prefix + "idx"
+        index_punct = punct_prefix + "index"
         assert (
             ft.create(
                 glide_sync_client,
@@ -1571,7 +1571,7 @@ class TestSyncFt:
 
         # TextField with NOSTEM — stemming is disabled, so "hellos" won't match "hello"
         nostem_prefix = "{ft-field-nostem-" + str(uuid.uuid4()) + "}:"
-        index_nostem = nostem_prefix + "idx"
+        index_nostem = nostem_prefix + "index"
         assert (
             ft.create(
                 glide_sync_client,
@@ -1595,7 +1595,7 @@ class TestSyncFt:
 
         # TextField with WITHSUFFIXTRIE — enables suffix queries like *orld
         suffix_prefix = "{ft-field-suffix-" + str(uuid.uuid4()) + "}:"
-        index_suffix = suffix_prefix + "idx"
+        index_suffix = suffix_prefix + "index"
         assert (
             ft.create(
                 glide_sync_client,
@@ -1618,7 +1618,7 @@ class TestSyncFt:
 
         # TextField with NOSUFFIXTRIE — disables suffix queries
         nosuffix_prefix = "{ft-field-nosuffix-" + str(uuid.uuid4()) + "}:"
-        index_nosuffix = nosuffix_prefix + "idx"
+        index_nosuffix = nosuffix_prefix + "index"
         assert (
             ft.create(
                 glide_sync_client,
@@ -1641,7 +1641,7 @@ class TestSyncFt:
 
         # TextField with WEIGHT (only 1.0 is valid per the spec)
         weight_prefix = "{ft-field-weight-" + str(uuid.uuid4()) + "}:"
-        index_weight = weight_prefix + "idx"
+        index_weight = weight_prefix + "index"
         assert (
             ft.create(
                 glide_sync_client,
@@ -1657,7 +1657,7 @@ class TestSyncFt:
 
         # SORTABLE on TextField
         sort_text_prefix = "{ft-field-sort-text-" + str(uuid.uuid4()) + "}:"
-        index_sortable_text = sort_text_prefix + "idx"
+        index_sortable_text = sort_text_prefix + "index"
         assert (
             ft.create(
                 glide_sync_client,
@@ -1673,7 +1673,7 @@ class TestSyncFt:
 
         # SORTABLE on TagField
         sort_tag_prefix = "{ft-field-sort-tag-" + str(uuid.uuid4()) + "}:"
-        index_sortable_tag = sort_tag_prefix + "idx"
+        index_sortable_tag = sort_tag_prefix + "index"
         assert (
             ft.create(
                 glide_sync_client,
@@ -1689,7 +1689,7 @@ class TestSyncFt:
 
         # SORTABLE on NumericField
         sort_num_prefix = "{ft-field-sort-num-" + str(uuid.uuid4()) + "}:"
-        index_sortable_num = sort_num_prefix + "idx"
+        index_sortable_num = sort_num_prefix + "index"
         assert (
             ft.create(
                 glide_sync_client,
@@ -1705,7 +1705,7 @@ class TestSyncFt:
 
         # Combined: multiple field options on a single index
         combined_prefix = "{ft-field-combined-" + str(uuid.uuid4()) + "}:"
-        index_combined = combined_prefix + "idx"
+        index_combined = combined_prefix + "index"
         assert (
             ft.create(
                 glide_sync_client,
@@ -1734,7 +1734,7 @@ class TestSyncFt:
         PRIMARY and CLUSTER require the coordinator (use-coordinator module arg).
         """
         prefix = "{ft-info-opts-" + str(uuid.uuid4()) + "}:"
-        index = prefix + "idx"
+        index = prefix + "index"
 
         assert (
             ft.create(
@@ -1798,7 +1798,7 @@ class TestSyncFt:
         Ref: https://valkey.io/commands/ft.search/
         """
         prefix = "{ft-search-sortby-" + str(uuid.uuid4()) + "}:"
-        index = prefix + "idx"
+        index = prefix + "index"
 
         assert (
             ft.create(
@@ -1865,7 +1865,7 @@ class TestSyncFt:
         # Each value is [sort_key, field_map]; prices should be ascending
         withkeys_map = cast(Mapping, result_withkeys[1])
         sort_keys = [withkeys_map[k][0] for k in withkeys_map]
-        assert sort_keys == [b"1", b"2", b"3"]
+        assert sort_keys == [b"#1", b"#2", b"#3"]
         # Field maps are still accessible at index 1
         field_prices = [withkeys_map[k][1][b"price"] for k in withkeys_map]
         assert field_prices == [b"1", b"2", b"3"]
@@ -1881,7 +1881,7 @@ class TestSyncFt:
         Ref: https://valkey.io/commands/ft.search/
         """
         prefix = "{ft-search-text-" + str(uuid.uuid4()) + "}:"
-        index = prefix + "idx"
+        index = prefix + "index"
 
         assert (
             ft.create(
@@ -1941,7 +1941,7 @@ class TestSyncFt:
         These are cluster-mode options; we verify they are accepted without error.
         """
         prefix = "{ft-search-shard-" + str(uuid.uuid4()) + "}:"
-        index = prefix + "idx"
+        index = prefix + "index"
 
         assert (
             ft.create(
@@ -1995,7 +1995,7 @@ class TestSyncFt:
         Ref: https://valkey.io/commands/ft.aggregate/
         """
         prefix = "{ft-agg-flags-" + str(uuid.uuid4()) + "}:"
-        index = prefix + "idx"
+        index = prefix + "index"
 
         assert (
             ft.create(
@@ -2076,7 +2076,7 @@ class TestSyncFt:
         Verifies that SORTBY works correctly on a text field declared SORTABLE.
         """
         prefix = "{ft-sortby-text-" + str(uuid.uuid4()) + "}:"
-        index = prefix + "idx"
+        index = prefix + "index"
 
         assert (
             ft.create(
