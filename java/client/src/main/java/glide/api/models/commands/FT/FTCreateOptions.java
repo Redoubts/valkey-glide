@@ -23,6 +23,7 @@ import lombok.NonNull;
  * command.
  */
 @Builder
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class FTCreateOptions {
     /** The index data type. If not defined a {@link DataType#HASH} index is created. */
     private final DataType dataType;
@@ -56,6 +57,31 @@ public class FTCreateOptions {
 
     /** Custom punctuation characters to use during tokenization. */
     private final String punctuation;
+
+    /**
+     * Backward-compatible convenience constructor for callers that only need {@code dataType} and
+     * {@code prefixes}. All other options use their defaults.
+     *
+     * @param dataType The index data type. If {@code null} a {@link DataType#HASH} index is created.
+     * @param prefixes A list of prefixes of index definitions.
+     */
+    public FTCreateOptions(DataType dataType, GlideString[] prefixes) {
+        this.dataType = dataType;
+        this.prefixes = prefixes;
+        this.score = null;
+        this.language = null;
+        this.skipInitialScan = false;
+        this.minStemSize = null;
+        this.withOffsets = false;
+        this.noOffsets = false;
+        this.noStopWords = false;
+        this.stopWords = null;
+        this.punctuation = null;
+    }
+
+    public static FTCreateOptionsBuilder builder() {
+        return new FTCreateOptionsBuilder();
+    }
 
     public GlideString[] toArgs() {
         if (withOffsets && noOffsets) {

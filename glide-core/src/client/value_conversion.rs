@@ -3624,9 +3624,9 @@ mod tests {
                     .arg("price")
                     .arg("WITHSORTKEYS")
             ),
-            Some(ExpectedReturnType::FTProfileReturnType(
-                &Some(ExpectedReturnType::FTSearchWithSortKeysReturnType)
-            ))
+            Some(ExpectedReturnType::FTProfileReturnType(&Some(
+                ExpectedReturnType::FTSearchWithSortKeysReturnType
+            )))
         ));
 
         // Normal WITHSORTKEYS response: triplets of (key, sortkey, fields_array)

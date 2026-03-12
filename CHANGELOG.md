@@ -1,11 +1,7 @@
 ## 2.3
 
 #### Changes
-* Python, Java, Node: Add valkey-search 1.2 features including VERBATIM, INORDER, SLOP for FT.SEARCH and FT.AGGREGATE; SORTBY/WITHSORTKEYS for FT.SEARCH; shard scope and consistency mode for FT.SEARCH in cluster mode; DIALECT for FT.AGGREGATE ([#5571](https://github.com/valkey-io/valkey-glide/pull/5571))
-* Python, Java, Node: Expand FT.CREATE field options: TextField now supports NOSTEM, WEIGHT, WITHSUFFIXTRIE/NOSUFFIXTRIE, SORTABLE; TagField supports CASESENSITIVE, SEPARATOR, SORTABLE; NumericField supports SORTABLE; VectorField supports SORTABLE ([#5571](https://github.com/valkey-io/valkey-glide/pull/5571))
-* Python, Java, Node: Add FT.CREATE index-level options: SCORE, LANGUAGE, SKIPINITIALSCAN, MINSTEMSIZE, WITHOFFSETS/NOOFFSETS, NOSTOPWORDS/STOPWORDS, PUNCTUATION ([#5571](https://github.com/valkey-io/valkey-glide/pull/5571))
-* Java: Add TagField(boolean caseSensitive, boolean sortable) constructor for creating sortable tag fields without specifying a separator
-* Node: Fix HNSW vector field serialization to use correct property names (`numberOfEdges`, `vectorsExaminedOnConstruction`, `vectorsExaminedOnRuntime`) matching the TypeScript type definitions ([#5571](https://github.com/valkey-io/valkey-glide/pull/5571))
+* Python, Java, Node, CORE: Add valkey-search 1.2 support — FT.CREATE index options (SCORE, LANGUAGE, SKIPINITIALSCAN, MINSTEMSIZE, WITHOFFSETS/NOOFFSETS, NOSTOPWORDS/STOPWORDS, PUNCTUATION) and field options (NOSTEM, WEIGHT, WITHSUFFIXTRIE/NOSUFFIXTRIE, SORTABLE); FT.SEARCH options (VERBATIM, INORDER, SLOP, SORTBY, WITHSORTKEYS, NOCONTENT, DIALECT, shard scope, consistency mode); FT.AGGREGATE options (VERBATIM, INORDER, SLOP, DIALECT); FT.INFO scope options (LOCAL, PRIMARY, CLUSTER, shard scope, consistency mode); WITHSORTKEYS and NOCONTENT response conversion in glide-core. Python `options` parameter for `ft.search()` and `ft.aggregate()` is now optional. ([#5571](https://github.com/valkey-io/valkey-glide/pull/5571))
 * Node: add dynamic PubSub support ([#5295](https://github.com/valkey-io/valkey-glide/pull/5295))
 * Java: Add uber JAR support for multi-platform builds ([5484](https://github.com/valkey-io/valkey-glide/issues/5484))
 * JAVA: Add EVAL_RO, EVALSHA_RO, and SCRIPT DEBUG commands ([#5125](https://github.com/valkey-io/valkey-glide/pull/5125))
@@ -34,6 +30,8 @@
 * Python Sync: Add response buffer support to get() to improve performance by reducing copies ([#5493](https://github.com/valkey-io/valkey-glide/pull/5493))
 
 #### Fixes
+* Node: Fix HNSW vector field serialization to use correct property names (`numberOfEdges`, `vectorsExaminedOnConstruction`, `vectorsExaminedOnRuntime`) matching the TypeScript type definitions ([#5571](https://github.com/valkey-io/valkey-glide/pull/5571))
+* Node: Fix missing `break` for NUMERIC field case in FT.CREATE serialization, preventing fall-through to VECTOR case ([#5571](https://github.com/valkey-io/valkey-glide/pull/5571))
 * CORE, Python, Java, Node: Add missing NOCONTENT and DIALECT options for FT.SEARCH ([#5550](https://github.com/valkey-io/valkey-glide/pull/5550))
 * CORE: Fix empty hostname in CLUSTER SLOTS metadata causing AllConnectionsUnavailable ([#5367](https://github.com/valkey-io/valkey-glide/issues/5367)). AWS ElastiCache (plaintext, cluster mode) returns `hostname: ""` in node metadata, which was used as the connection address instead of falling back to the IP.
 * Node: Fix to handle non-string types in toBuffersArray ([#4842](https://github.com/valkey-io/valkey-glide/issues/4842))
