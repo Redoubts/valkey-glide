@@ -243,6 +243,24 @@ To run [DNS tests](integTest/dns_test.go) locally:
 
 If the environment variable is not set, DNS tests will be skipped.
 
+#### Valkey Search Module Tests
+
+Some integration tests and example tests require a Valkey server with the [search module](https://github.com/valkey-io/valkey-search/) loaded (e.g. `FT.CREATE`, `FT.SEARCH`, `FT.AGGREGATE`).
+
+To run the Valkey Search integration tests, first start up a Valkey Server with the search module loaded. In this example, it's loaded on port 7000:
+
+```bash
+make modules-test cluster-endpoints=127.0.0.1:7000 test-filter=TestGlideTestSuite/TestFt
+```
+
+To run the Valkey Search example tests, pass the `-vss-test` flag when invoking `go test` directly, pointing at a server with the search module loaded:
+
+```bash
+go test . -vss-test -clusternodes <host:port> -standalonenode <host:port>
+```
+
+If `-vss-test` is not passed, the FT example functions return immediately without executing and are treated as compile-only examples.
+
 #### Test Reports and Results
 
 Alongside terminal output, test reports are generated in `reports` folder.
