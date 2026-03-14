@@ -85,8 +85,6 @@ type FtSearchOptions struct {
 	Params []FtSearchParam
 	// Limit provides pagination. Only keys satisfying offset and count are returned.
 	Limit *FtSearchLimit
-	// Count suppresses field content; only the number of matching keys is returned.
-	Count bool
 	// NoContent returns only document IDs without field content.
 	NoContent bool
 	// Dialect sets the query dialect version. The only supported dialect is 2.
@@ -167,9 +165,6 @@ func (o *FtSearchOptions) ToArgs() ([]string, error) {
 	}
 	if o.Limit != nil {
 		args = append(args, "LIMIT", strconv.Itoa(o.Limit.Offset), strconv.Itoa(o.Limit.Count))
-	}
-	if o.Count {
-		args = append(args, "COUNT")
 	}
 	if o.Dialect != nil {
 		args = append(args, "DIALECT", strconv.Itoa(*o.Dialect))

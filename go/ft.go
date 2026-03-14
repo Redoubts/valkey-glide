@@ -404,12 +404,17 @@ func handleFtSearchResponse(response *C.struct_CommandResponse) (models.FtSearch
 		return models.FtSearchResult{}, nil
 	}
 	arr, ok := data.([]any)
-	if !ok || len(arr) < 2 {
-		return models.FtSearchResult{}, fmt.Errorf("unexpected FT.SEARCH response format: expected [count, docs] array")
+	if !ok || len(arr) == 0 {
+		return models.FtSearchResult{}, fmt.Errorf("unexpected FT.SEARCH response format: expected non-empty array")
 	}
 	count, ok := arr[0].(int64)
 	if !ok {
 		return models.FtSearchResult{}, fmt.Errorf("unexpected FT.SEARCH response format: expected int64 count")
+	}
+	// LIMIT 0 0 response: glide-core returns a single-element array [count]
+	// when no documents are requested.
+	if len(arr) == 1 {
+		return models.FtSearchResult{TotalResults: count, Documents: nil}, nil
 	}
 	docs, ok := arr[1].(map[string]any)
 	if !ok {
