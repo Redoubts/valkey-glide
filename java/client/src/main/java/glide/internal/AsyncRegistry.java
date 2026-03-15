@@ -23,23 +23,30 @@ import java.util.concurrent.atomic.AtomicLong;
  * <ul>
  *   <li>Maintain a thread-safe mapping from correlation id to the original future
  *   <li>Enforce per-client max inflight requests in Java (0 = defer to core default)
- *   <li>Schedule optional Java-side timeouts with cancellable tasks
+ *   <li>Enforce timeouts via a periodic sweep instead of per-request scheduled tasks
  *   <li>Perform atomic cleanup on completion to avoid races and leaks
  * </ul>
  *
- * <p>Timeouts can be enforced at the Java layer (for immediate user feedback) or deferred to the
- * Rust core (when timeoutMillis = 0). Backpressure defaults and concurrency tuning are handled by
- * the Rust core.
+ * <p>Timeouts use a periodic sweep over {@code activeFutures}. Each entry stores the future and its
+ * deadline, avoiding per-request scheduling overhead. This reduces timer task creation from O(N) to
+ * O(1) and eliminates the throughput regression caused by per-request ScheduledFuture allocation.
  */
 public final class AsyncRegistry {
 
-    /** Thread-safe storage for active futures. Using ConcurrentHashMap for lock-free operations. */
-    private static final ConcurrentHashMap<Long, CompletableFuture<Object>> activeFutures =
-            new ConcurrentHashMap<>(estimateInitialCapacity());
+    /** Entry holding the future and its deadline for the timeout sweep. */
+    private static final class Entry {
+        final CompletableFuture<Object> future;
+        final long deadlineMs; // System.currentTimeMillis() + timeout, or Long.MAX_VALUE for no timeout
 
-    /** Scheduled timeout tasks mapped by correlation ID for cancellation on completion. */
-    private static final ConcurrentHashMap<Long, ScheduledFuture<?>> timeoutTasks =
-            new ConcurrentHashMap<>();
+        Entry(CompletableFuture<Object> future, long deadlineMs) {
+            this.future = future;
+            this.deadlineMs = deadlineMs;
+        }
+    }
+
+    /** Thread-safe storage for active futures. Using ConcurrentHashMap for lock-free operations. */
+    private static final ConcurrentHashMap<Long, Entry> activeFutures =
+            new ConcurrentHashMap<>(estimateInitialCapacity());
 
     /**
      * Per-client inflight request counters. Maps client handle to the number of active requests for
@@ -58,16 +65,19 @@ public final class AsyncRegistry {
     private static final AtomicBoolean isShutdown = new AtomicBoolean(false);
 
     /**
-     * Single-threaded scheduler for timeout tasks. Uses a daemon thread so it won't prevent JVM
-     * shutdown. Tasks are cancellable via {@link ScheduledFuture#cancel(boolean)}.
+     * Single-threaded scheduler for the periodic timeout sweep. Uses a daemon thread so it won't
+     * prevent JVM shutdown. One fixed-rate task replaces per-request ScheduledFuture allocation.
      */
     private static final ScheduledExecutorService timeoutScheduler =
             Executors.newSingleThreadScheduledExecutor(
                     r -> {
-                        Thread t = new Thread(r, "GlideTimeoutScheduler");
+                        Thread t = new Thread(r, "GlideTimeoutSweep");
                         t.setDaemon(true);
                         return t;
                     });
+
+    /** Handle for the periodic sweep task, used for cancellation during shutdown. */
+    private static volatile ScheduledFuture<?> sweepTask;
 
     private static final Thread shutdownHook =
             new Thread(AsyncRegistry::shutdown, "AsyncRegistry-Shutdown");
@@ -99,6 +109,34 @@ public final class AsyncRegistry {
         }
 
         return 2000; // Default with margin over core's 1000
+    }
+
+    /**
+     * Start the periodic sweep if not already running. Called lazily on first timeout registration.
+     */
+    private static void ensureSweepRunning() {
+        if (sweepTask == null) {
+            synchronized (AsyncRegistry.class) {
+                if (sweepTask == null) {
+                    sweepTask =
+                            timeoutScheduler.scheduleAtFixedRate(
+                                    AsyncRegistry::sweepTimedOut, 100, 100, TimeUnit.MILLISECONDS);
+                }
+            }
+        }
+    }
+
+    /** Sweep all entries whose deadline has passed and complete them with TimeoutException. */
+    private static void sweepTimedOut() {
+        long now = System.currentTimeMillis();
+        activeFutures.forEach(
+                (id, entry) -> {
+                    if (entry.deadlineMs <= now) {
+                        if (entry.future.completeExceptionally(new TimeoutException("Request timed out"))) {
+                            GlideNativeBridge.markTimedOut(id);
+                        }
+                    }
+                });
     }
 
     /**
@@ -137,15 +175,14 @@ public final class AsyncRegistry {
 
         long correlationId = nextId.getAndIncrement();
 
-        // Store the original future
         @SuppressWarnings("unchecked")
         CompletableFuture<Object> originalFuture = (CompletableFuture<Object>) future;
 
-        // Store original future for completion by native code
-        activeFutures.put(correlationId, originalFuture);
+        long deadline = timeoutMillis > 0 ? System.currentTimeMillis() + timeoutMillis : Long.MAX_VALUE;
+
+        activeFutures.put(correlationId, new Entry(originalFuture, deadline));
 
         // Double-check shutdown flag after insertion to handle race with shutdown()
-        // If shutdown started between our first check and the put(), clean up and fail
         if (isShutdown.get()) {
             activeFutures.remove(correlationId);
             if (maxInflightRequests > 0) {
@@ -156,13 +193,12 @@ public final class AsyncRegistry {
             return 0L;
         }
 
-        // Schedule Java-side timeout if configured (0 = defer to Rust core timeout)
+        // Ensure the sweep is running if we have a timeout to enforce
         if (timeoutMillis > 0) {
-            scheduleTimeout(correlationId, originalFuture, timeoutMillis);
+            ensureSweepRunning();
         }
 
         // Set up cleanup on the original future
-        // This ensures proper resource cleanup when completed
         setupCleanup(correlationId, originalFuture, maxInflightRequests, clientHandle);
 
         return correlationId;
@@ -183,25 +219,6 @@ public final class AsyncRegistry {
     }
 
     /**
-     * Schedule a cancellable timeout task. If the request doesn't complete within timeoutMillis, the
-     * future is completed exceptionally with TimeoutException and the native layer is notified.
-     */
-    private static void scheduleTimeout(
-            long correlationId, CompletableFuture<Object> future, long timeoutMillis) {
-        ScheduledFuture<?> task =
-                timeoutScheduler.schedule(
-                        () -> {
-                            timeoutTasks.remove(correlationId);
-                            if (future.completeExceptionally(new TimeoutException("Request timed out"))) {
-                                GlideNativeBridge.markTimedOut(correlationId);
-                            }
-                        },
-                        timeoutMillis,
-                        TimeUnit.MILLISECONDS);
-        timeoutTasks.put(correlationId, task);
-    }
-
-    /**
      * Set up cleanup handler for when the future completes (success, error, or timeout). Performs
      * atomic cleanup to avoid races and leaks.
      */
@@ -214,13 +231,6 @@ public final class AsyncRegistry {
                 (result, error) -> {
                     // Atomic cleanup - no race conditions
                     activeFutures.remove(correlationId);
-
-                    // Cancel the timeout task if it hasn't fired yet
-                    // Using cancel(false) to avoid interrupting the scheduler thread
-                    ScheduledFuture<?> timeoutTask = timeoutTasks.remove(correlationId);
-                    if (timeoutTask != null) {
-                        timeoutTask.cancel(false);
-                    }
 
                     // Decrement per-client counter if applicable
                     if (maxInflightRequests > 0) {
@@ -235,8 +245,6 @@ public final class AsyncRegistry {
                 clientHandle,
                 (key, counter) -> {
                     int remaining = counter.decrementAndGet();
-                    // Clean up the entry when no more inflight requests
-                    // to avoid leaking counters for inactive clients
                     return remaining <= 0 ? null : counter;
                 });
     }
@@ -244,32 +252,20 @@ public final class AsyncRegistry {
     /**
      * Complete callback with proper race condition handling. Returns false if already completed or
      * timed out.
-     *
-     * @param correlationId the correlation ID from register()
-     * @param result the result to complete with
-     * @return true if completed, false if already done
      */
     public static boolean completeCallback(long correlationId, Object result) {
-        CompletableFuture<Object> future = activeFutures.get(correlationId);
-        // complete() returns false if already completed
-        // This prevents IllegalStateException from completing twice
-        // Note: cleanup happens automatically in whenComplete()
-        return future != null && future.complete(result);
+        Entry entry = activeFutures.get(correlationId);
+        return entry != null && entry.future.complete(result);
     }
 
     /**
      * Complete with error using a structured error code from native layer. Codes map to glide-core
      * RequestErrorType: 0=Unspecified, 1=ExecAbort, 2=Timeout, 3=Disconnect.
-     *
-     * @param correlationId the correlation ID from register()
-     * @param errorTypeCode error type code from native layer
-     * @param errorMessage error message from native layer
-     * @return true if completed, false if already done
      */
     public static boolean completeCallbackWithErrorCode(
             long correlationId, int errorTypeCode, String errorMessage) {
-        CompletableFuture<Object> future = activeFutures.get(correlationId);
-        if (future == null) {
+        Entry entry = activeFutures.get(correlationId);
+        if (entry == null) {
             return false;
         }
 
@@ -294,7 +290,7 @@ public final class AsyncRegistry {
                 break;
         }
 
-        return future.completeExceptionally(ex);
+        return entry.future.completeExceptionally(ex);
     }
 
     /** Get current pending operation count. */
@@ -304,44 +300,40 @@ public final class AsyncRegistry {
 
     /** Shutdown cleanup - cancel all pending operations during client shutdown. */
     public static void shutdown() {
-        // Set shutdown flag first to prevent new registrations
-        // This must happen before any clearing to avoid race conditions
         isShutdown.set(true);
 
-        // Cancel timeout tasks without interrupting (they're just scheduled, not running)
-        timeoutTasks.values().forEach(task -> task.cancel(false));
-        timeoutTasks.clear();
+        ScheduledFuture<?> task = sweepTask;
+        if (task != null) {
+            task.cancel(false);
+        }
 
-        // Cancel user futures with interrupt (may be blocked waiting)
-        activeFutures.values().forEach(future -> future.cancel(true));
+        activeFutures.values().forEach(entry -> entry.future.cancel(true));
         activeFutures.clear();
         clientInflightCounts.clear();
 
-        // Shutdown the timeout scheduler
         timeoutScheduler.shutdownNow();
     }
 
     /**
      * Fail all pending futures with a {@link ClosingException}. Called from the native layer when a
-     * fatal infrastructure failure is detected (e.g., callback worker threads terminated or native
-     * panic). This ensures no future is left dangling.
-     *
-     * @param errorMessage description of the failure cause
+     * fatal infrastructure failure is detected.
      */
     public static void failAllWithError(String errorMessage) {
-        // Set shutdown flag first to prevent new registrations
-        // This must happen before any clearing to avoid race conditions
         isShutdown.set(true);
 
         String msg =
                 (errorMessage == null || errorMessage.isEmpty())
                         ? "Native callback infrastructure failed"
                         : errorMessage;
-        activeFutures.forEach((id, future) -> future.completeExceptionally(new ClosingException(msg)));
+        activeFutures.forEach(
+                (id, entry) -> entry.future.completeExceptionally(new ClosingException(msg)));
         activeFutures.clear();
 
-        timeoutTasks.values().forEach(task -> task.cancel(false));
-        timeoutTasks.clear();
+        ScheduledFuture<?> task = sweepTask;
+        if (task != null) {
+            task.cancel(false);
+        }
+
         clientInflightCounts.clear();
     }
 
@@ -352,42 +344,30 @@ public final class AsyncRegistry {
 
     /** Reset all internal state. Intended for test isolation and client shutdown cleanup. */
     public static void reset() {
-        // Reset shutdown flag first to allow new registrations
         isShutdown.set(false);
 
-        // Cancel timeout tasks without interrupting
-        timeoutTasks.values().forEach(task -> task.cancel(false));
-        timeoutTasks.clear();
+        ScheduledFuture<?> task = sweepTask;
+        if (task != null) {
+            task.cancel(false);
+        }
+        synchronized (AsyncRegistry.class) {
+            sweepTask = null;
+        }
+
         activeFutures.clear();
         clientInflightCounts.clear();
         nextId.set(1);
     }
 
     /**
-     * Returns the count of pending timeout tasks. Intended for testing to verify timeout tasks are
-     * cancelled properly and don't accumulate.
-     *
-     * @return number of active timeout tasks
-     */
-    public static int getPendingTimeoutCount() {
-        return timeoutTasks.size();
-    }
-
-    /**
      * Returns the count of active futures. Intended for testing to verify futures are cleaned up
      * properly.
-     *
-     * @return number of active futures
      */
     public static int getActiveFutureCount() {
         return activeFutures.size();
     }
 
-    /**
-     * Returns whether the registry is in shutdown state. Intended for testing and diagnostics.
-     *
-     * @return true if shutdown() or failAllWithError() has been called
-     */
+    /** Returns whether the registry is in shutdown state. */
     public static boolean isShutdown() {
         return isShutdown.get();
     }
