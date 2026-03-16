@@ -18,27 +18,29 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * Async registry for correlating native callbacks with Java {@link CompletableFuture}s.
  *
- * <p>Timeouts are enforced by a 1ms periodic sweep that checks stored deadlines, replacing
- * per-request {@code ScheduledFuture} allocation. Cleanup is performed via atomic {@code remove()}
- * in each completion path, avoiding {@code CompletableFuture.whenComplete()} overhead.
+ * <p>Timeouts are enforced by a 1ms periodic sweep that checks stored deadlines (computed via
+ * monotonic {@link System#nanoTime()}), replacing per-request {@code ScheduledFuture} allocation.
+ * Cleanup is performed via atomic {@code remove()} in each completion path, avoiding {@code
+ * CompletableFuture.whenComplete()} overhead.
  */
 public final class AsyncRegistry {
 
     private static final int SWEEP_INTERVAL_MS = 1;
+    private static final long NANOS_PER_MS = 1_000_000L;
 
     private static final class Entry {
         final CompletableFuture<Object> future;
-        final long deadlineMs;
+        final long deadlineNanos; // System.nanoTime() + timeout, or Long.MAX_VALUE
         final int maxInflightRequests;
         final long clientHandle;
 
         Entry(
                 CompletableFuture<Object> future,
-                long deadlineMs,
+                long deadlineNanos,
                 int maxInflightRequests,
                 long clientHandle) {
             this.future = future;
-            this.deadlineMs = deadlineMs;
+            this.deadlineNanos = deadlineNanos;
             this.maxInflightRequests = maxInflightRequests;
             this.clientHandle = clientHandle;
         }
@@ -108,19 +110,24 @@ public final class AsyncRegistry {
     }
 
     private static void sweepTimedOut() {
-        long now = System.currentTimeMillis();
-        activeFutures.forEach(
-                (id, entry) -> {
-                    if (entry.deadlineMs <= now) {
-                        Entry removed = activeFutures.remove(id);
-                        if (removed != null
-                                && removed.future.completeExceptionally(
+        try {
+            long now = System.nanoTime();
+            activeFutures.forEach(
+                    (id, entry) -> {
+                        if (entry.deadlineNanos <= now) {
+                            Entry removed = activeFutures.remove(id);
+                            if (removed != null) {
+                                releaseInflight(removed);
+                                if (removed.future.completeExceptionally(
                                         new TimeoutException("Request timed out"))) {
-                            releaseInflight(removed);
-                            GlideNativeBridge.markTimedOut(id);
+                                    GlideNativeBridge.markTimedOut(id);
+                                }
+                            }
                         }
-                    }
-                });
+                    });
+        } catch (Throwable t) {
+            // Never let an exception kill the sweep — scheduleAtFixedRate silently stops on throw
+        }
     }
 
     // ---- Registration ----
@@ -151,7 +158,8 @@ public final class AsyncRegistry {
         @SuppressWarnings("unchecked")
         CompletableFuture<Object> originalFuture = (CompletableFuture<Object>) future;
 
-        long deadline = timeoutMillis > 0 ? System.currentTimeMillis() + timeoutMillis : Long.MAX_VALUE;
+        long deadline =
+                timeoutMillis > 0 ? System.nanoTime() + timeoutMillis * NANOS_PER_MS : Long.MAX_VALUE;
 
         activeFutures.put(
                 correlationId, new Entry(originalFuture, deadline, maxInflightRequests, clientHandle));
@@ -181,11 +189,11 @@ public final class AsyncRegistry {
         if (entry == null) {
             return false;
         }
-        boolean completed = entry.future.complete(result);
-        if (completed) {
-            releaseInflight(entry);
-        }
-        return completed;
+        // Always release inflight — we own the entry via atomic remove().
+        // complete() may return false if the future was externally cancelled/completed,
+        // but the inflight slot must still be freed.
+        releaseInflight(entry);
+        return entry.future.complete(result);
     }
 
     /**
@@ -220,11 +228,9 @@ public final class AsyncRegistry {
                 break;
         }
 
-        boolean completed = entry.future.completeExceptionally(ex);
-        if (completed) {
-            releaseInflight(entry);
-        }
-        return completed;
+        // Always release — we own the entry via atomic remove()
+        releaseInflight(entry);
+        return entry.future.completeExceptionally(ex);
     }
 
     // ---- Inflight tracking ----
