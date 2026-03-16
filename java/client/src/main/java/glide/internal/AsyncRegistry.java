@@ -111,11 +111,14 @@ public final class AsyncRegistry {
         long now = System.currentTimeMillis();
         activeFutures.forEach(
                 (id, entry) -> {
-                    if (entry.deadlineMs <= now
-                            && entry.future.completeExceptionally(new TimeoutException("Request timed out"))) {
-                        activeFutures.remove(id);
-                        releaseInflight(entry);
-                        GlideNativeBridge.markTimedOut(id);
+                    if (entry.deadlineMs <= now) {
+                        Entry removed = activeFutures.remove(id);
+                        if (removed != null
+                                && removed.future.completeExceptionally(
+                                        new TimeoutException("Request timed out"))) {
+                            releaseInflight(removed);
+                            GlideNativeBridge.markTimedOut(id);
+                        }
                     }
                 });
     }

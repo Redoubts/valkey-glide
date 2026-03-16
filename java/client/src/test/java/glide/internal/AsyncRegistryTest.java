@@ -39,7 +39,6 @@ public class AsyncRegistryTest {
         assertTrue(f2.isCompletedExceptionally());
         assertTrue(f3.isCompletedExceptionally());
         assertEquals(0, AsyncRegistry.getActiveFutureCount());
-        assertEquals(0, AsyncRegistry.getActiveFutureCount());
 
         assertClosingException(f1, "test error");
         assertClosingException(f2, "test error");
